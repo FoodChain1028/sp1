@@ -120,6 +120,9 @@ pub struct MulCols<T> {
     /// Flag indicating whether the opcode is `MULHSU` (`i32 x u32`, upper half).
     pub is_mulhsu: T,
 
+    /// Flag indicating whether the opcode is `SQR` (`u32 x u32`).
+    pub is_sqr: T,
+
     /// Selector to know whether this row is enabled.
     pub is_real: T,
 }
@@ -279,8 +282,8 @@ impl MulChip {
         cols.is_mulh = F::from_bool(event.opcode == Opcode::MULH);
         cols.is_mulhu = F::from_bool(event.opcode == Opcode::MULHU);
         cols.is_mulhsu = F::from_bool(event.opcode == Opcode::MULHSU);
+        cols.is_sqr = F::from_bool(event.opcode == Opcode::SQR);
         cols.shard = F::from_canonical_u32(event.shard);
-
         // Range check.
         {
             blu.add_u16_range_checks(event.shard, &carry.map(|x| x as u16));
@@ -418,16 +421,18 @@ where
             // Exactly one of the op codes must be on.
             builder
                 .when(local.is_real)
-                .assert_one(local.is_mul + local.is_mulh + local.is_mulhu + local.is_mulhsu);
+                .assert_one(local.is_mul + local.is_mulh + local.is_mulhu + local.is_mulhsu + local.is_sqr);
 
             let mul: AB::Expr = AB::F::from_canonical_u32(Opcode::MUL as u32).into();
             let mulh: AB::Expr = AB::F::from_canonical_u32(Opcode::MULH as u32).into();
             let mulhu: AB::Expr = AB::F::from_canonical_u32(Opcode::MULHU as u32).into();
             let mulhsu: AB::Expr = AB::F::from_canonical_u32(Opcode::MULHSU as u32).into();
+            let sqr: AB::Expr = AB::F::from_canonical_u32(Opcode::SQR as u32).into();
             local.is_mul * mul
                 + local.is_mulh * mulh
                 + local.is_mulhu * mulhu
                 + local.is_mulhsu * mulhsu
+                + local.is_sqr * sqr
         };
 
         // Range check.
@@ -553,6 +558,51 @@ mod tests {
         // Append more events until we have 1000 tests.
         for _ in 0..(1000 - mul_instructions.len()) {
             mul_events.push(AluEvent::new(0, 0, Opcode::MUL, 1, 1, 1));
+        }
+
+        shard.mul_events = mul_events;
+        let chip = MulChip::default();
+        let trace: RowMajorMatrix<BabyBear> =
+            chip.generate_trace(&shard, &mut ExecutionRecord::default());
+        let proof = prove::<BabyBearPoseidon2, _>(&config, &chip, &mut challenger, trace);
+
+        let mut challenger = config.challenger();
+        verify(&config, &chip, &mut challenger, &proof).unwrap();
+    }
+
+    // This is just a test mimicking from the tests above.
+    // But it can test that the square operation is correctly implemented.
+    #[test]
+    fn test_square_operation() {
+        let config = BabyBearPoseidon2::new();
+        let mut challenger = config.challenger();
+
+        let mut shard = ExecutionRecord::default();
+        let mut mul_events: Vec<AluEvent> = Vec::new();
+
+        // Test cases for square operation
+        // Format: (expected_result, input)
+        let square_test_cases: Vec<(u32, u32)> = vec![
+            (0x00000000, 0x00000000), // 0^2 = 0
+            (0x00000001, 0x00000001), // 1^2 = 1
+            (0x00000004, 0x00000002), // 2^2 = 4
+            (0x00000009, 0x00000003), // 3^2 = 9
+            (0x00000010, 0x00000004), // 4^2 = 16
+            (0x00000019, 0x00000005), // 5^2 = 25
+            (0x00010000, 0x00000100), // 256^2 = 65536
+            (0x01000000, 0x00001000), // 4096^2 = 16777216
+            (0x00000000, 0x80000000), // Testing overflow cases
+            (0xFFFE0001, 0x0000FFFF), // Testing max 16-bit number
+            (0x00000001, 0xFFFFFFFF), // Testing max 32-bit number
+        ];
+
+        // Create ALU events for each test case
+        for (expected, input) in square_test_cases.iter() {
+            mul_events.push(AluEvent::new(0, 0, Opcode::SQR, *expected, *input, *input));
+        }
+
+        for _ in 0..(1000 - square_test_cases.len()) {
+            mul_events.push(AluEvent::new(0, 0, Opcode::SQR, 1, 1, 1));
         }
 
         shard.mul_events = mul_events;
