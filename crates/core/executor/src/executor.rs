@@ -876,7 +876,8 @@ impl<'a> Executor<'a> {
             | Opcode::DIV
             | Opcode::DIVU
             | Opcode::REM
-            | Opcode::REMU => {
+            | Opcode::REMU
+            | Opcode::SQR => {
                 (a, b, c) = self.execute_alu(instruction, lookup_id);
             }
 
@@ -1092,6 +1093,7 @@ impl<'a> Executor<'a> {
                     b.wrapping_rem(c)
                 }
             }
+            Opcode::SQR => b.wrapping_mul(b),
             _ => unreachable!(),
         };
         self.alu_rw(instruction, rd, a, b, c, lookup_id);
@@ -2093,6 +2095,22 @@ mod tests {
         assert_eq!(runtime.registers()[Register::X5 as usize], 8);
         assert_eq!(runtime.registers()[Register::X11 as usize], 100);
         assert_eq!(runtime.state.pc, 108);
+    }
+
+    #[test]
+    fn test_square() {
+        //  addi x10, x0, 5
+        //  sqr x30, x10
+        let instructions = vec![
+            Instruction::new(Opcode::ADD, 10, 0, 5, false, true),
+            // Set x30 to 5^2
+            Instruction::new(Opcode::SQR, 31, 10, 0, false, true),
+        ];
+        let program = Program::new(instructions, 0, 0);
+        let mut runtime = Executor::new(program, SP1CoreOpts::default());
+        runtime.run().unwrap();
+        assert_eq!(runtime.register(Register::X10), 5);
+        assert_eq!(runtime.register(Register::X31), 25);
     }
 
     fn simple_op_code_test(opcode: Opcode, expected: u32, a: u32, b: u32) {
