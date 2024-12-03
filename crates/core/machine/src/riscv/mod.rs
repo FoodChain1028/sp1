@@ -79,6 +79,8 @@ pub enum RiscvAir<F: PrimeField32> {
     Bitwise(BitwiseChip),
     /// An AIR for RISC-V Mul instruction.
     Mul(MulChip),
+    /// An AIR for RISC-V Square instruction.
+    Sqr(MulChip),
     /// An AIR for RISC-V Div and Rem instructions.
     DivRem(DivRemChip),
     /// An AIR for RISC-V Lt instruction.
@@ -527,6 +529,7 @@ impl<F: PrimeField32> RiscvAir<F> {
             Self::ProgramMemory(_) => unreachable!("Invalid for memory program"),
             Self::Program(_) => unreachable!("Invalid for core chip"),
             Self::Mul(_) => unreachable!("Invalid for core chip"),
+            Self::Sqr(_) => unreachable!("Invalid for core chip"),
             Self::Lt(_) => unreachable!("Invalid for core chip"),
             Self::ShiftRight(_) => unreachable!("Invalid for core chip"),
             Self::ShiftLeft(_) => unreachable!("Invalid for core chip"),
@@ -660,6 +663,27 @@ pub mod tests {
                 let program = Program::new(instructions, 0, 0);
                 run_test::<CpuProver<_, _>>(program).unwrap();
             }
+        }
+    }
+
+    #[test]
+    fn test_sqr_prove() {
+        let sqr_op = Opcode::SQR;
+        utils::setup_logger();
+
+        // testing for a sequence of square operations:
+        // 1. 2^2 = 4
+        // 2. 4^2 = 16
+        // 3. 16^2 = 256
+        // 4. 256^2 = 65536
+
+        for _ in 0..4 {
+            let instructions = vec![
+                Instruction::new(Opcode::ADD, 30, 0, 2, false, true),
+                Instruction::new(sqr_op, 31, 30, 0, false, false),
+            ];
+            let program = Program::new(instructions, 0, 0);
+            run_test::<CpuProver<_, _>>(program).unwrap();
         }
     }
 
