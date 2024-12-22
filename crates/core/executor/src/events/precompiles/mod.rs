@@ -4,6 +4,7 @@ mod fptower;
 mod keccak256_permute;
 mod sha256_compress;
 mod sha256_extend;
+mod sqr;
 mod u256x2048_mul;
 mod uint256;
 
@@ -16,6 +17,7 @@ pub use keccak256_permute::*;
 use serde::{Deserialize, Serialize};
 pub use sha256_compress::*;
 pub use sha256_extend::*;
+pub use sqr::*;
 use strum::{EnumIter, IntoEnumIterator};
 pub use u256x2048_mul::*;
 pub use uint256::*;
@@ -25,6 +27,8 @@ use super::{MemoryLocalEvent, SyscallEvent};
 #[derive(Clone, Debug, Serialize, Deserialize, EnumIter)]
 /// Precompile event.  There should be one variant for every precompile syscall.
 pub enum PrecompileEvent {
+    /// Square precompile event.
+    Square(SquareEvent),
     /// Sha256 extend precompile event.
     ShaExtend(ShaExtendEvent),
     /// Sha256 compress precompile event.
@@ -89,6 +93,9 @@ impl PrecompileLocalMemory for Vec<(SyscallEvent, PrecompileEvent)> {
 
         for (_, event) in self.iter() {
             match event {
+                PrecompileEvent::Square(e) => {
+                    iterators.push(e.local_mem_access.iter());
+                }
                 PrecompileEvent::ShaExtend(e) => {
                     iterators.push(e.local_mem_access.iter());
                 }
